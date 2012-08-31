@@ -84,6 +84,10 @@ func (r *RemoteConsole) Read() (response string, requestId int, err error) {
 	return
 }
 
+func (r *RemoteConsole) Close() error {
+	return r.Close()
+}
+
 func newRequestId(id int32) int32 {
 	if id&0x0fffffff != id {
 		return int32((time.Now().UnixNano() / 100000) % 100000)
