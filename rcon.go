@@ -97,7 +97,9 @@ func newRequestId(id int32) int32 {
 
 func (r *RemoteConsole) writeCmd(cmdType int32, str string) (int, error) {
 	buffer := bytes.NewBuffer(make([]byte, 14+len(str)))
-	reqid := newRequestId(r.reqid)
+	reqid := atomic.LoadInt32(&r.reqid)
+	reqid = newRequestId(reqid)
+	atomic.StoreInt32(&r.reqid, reqid)
 
 	// packet size
 	binary.Write(buffer, binary.LittleEndian, uint32(10+len(str)))
@@ -118,7 +120,6 @@ func (r *RemoteConsole) writeCmd(cmdType int32, str string) (int, error) {
 
 	r.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	_, err := r.conn.Write(buffer.Bytes())
-	atomic.StoreInt32(&r.reqid, reqid)
 	return int(reqid), err
 }
 
