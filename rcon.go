@@ -85,7 +85,7 @@ func (r *RemoteConsole) Read() (response string, requestId int, err error) {
 }
 
 func (r *RemoteConsole) Close() error {
-	return r.Close()
+	return r.conn.Close()
 }
 
 func newRequestId(id int32) int32 {
@@ -96,27 +96,27 @@ func newRequestId(id int32) int32 {
 }
 
 func (r *RemoteConsole) writeCmd(cmdType int32, str string) (int, error) {
-	buffer := bytes.NewBuffer(make([]byte, 14+len(str)))
+	buffer := bytes.NewBuffer(make([]byte, 0, 14+len(str)))
 	reqid := atomic.LoadInt32(&r.reqid)
 	reqid = newRequestId(reqid)
 	atomic.StoreInt32(&r.reqid, reqid)
 
 	// packet size
-	binary.Write(buffer, binary.LittleEndian, uint32(10+len(str)))
+	binary.Write(buffer, binary.LittleEndian, int32(10+len(str)))
 
 	// request id
-	binary.Write(buffer, binary.LittleEndian, reqid)
+	binary.Write(buffer, binary.LittleEndian, int32(reqid))
 
 	// auth cmd
-	binary.Write(buffer, binary.LittleEndian, uint32(cmdType))
+	binary.Write(buffer, binary.LittleEndian, int32(cmdType))
 
 	// string (null terminated)
 	buffer.WriteString(str)
-	binary.Write(buffer, binary.LittleEndian, uint8(0))
+	binary.Write(buffer, binary.LittleEndian, byte(0))
 
 	// string 2 (null terminated)
 	// we don't have a use for string 2
-	binary.Write(buffer, binary.LittleEndian, uint8(0))
+	binary.Write(buffer, binary.LittleEndian, byte(0))
 
 	r.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	_, err := r.conn.Write(buffer.Bytes())
@@ -134,11 +134,12 @@ func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, string, e
 	}
 
 	var responseSize, requestId, responseType int32
+	var response []byte
 	b := bytes.NewBuffer(r.readbuf)
 	binary.Read(b, binary.LittleEndian, &responseSize)
 	binary.Read(b, binary.LittleEndian, &requestId)
 	binary.Read(b, binary.LittleEndian, &responseType)
-	response, err := b.ReadString(0x00)
+	response, err = b.ReadBytes(0x00)
 
-	return int(responseType), int(requestId), response, nil
+	return int(responseType), int(requestId), string(response[:len(response)-1]), nil
 }
