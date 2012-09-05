@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -19,15 +20,19 @@ const (
 )
 
 type RemoteConsole struct {
-	conn    net.Conn
-	readbuf []byte
-	readmu  sync.Mutex
-	reqid   int32
+	conn      net.Conn
+	readbuf   []byte
+	readmu    sync.Mutex
+	reqid     int32
+	queuedbuf []byte
 }
 
 var (
-	ErrInvalidAuthResponse = errors.New("rcon: invalid response type during auth")
 	ErrAuthFailed          = errors.New("rcon: authentication failed")
+	ErrInvalidAuthResponse = errors.New("rcon: invalid response type during auth")
+	ErrUnexpectedFormat    = errors.New("rcon: unexpected response format")
+	ErrCommandTooLong      = errors.New("rcon: command length too long")
+	ErrResponseTooLong     = errors.New("rcon: response length too long")
 )
 
 func New(host, password string) (*RemoteConsole, error) {
@@ -44,8 +49,11 @@ func New(host, password string) (*RemoteConsole, error) {
 		return nil, err
 	}
 
+	// 12 byte header, up to 4096 bytes of data, 2 bytes for null terminators
+	// this should be the absolute max size of a single response.
+	r.readbuf = make([]byte, 4110)
+
 	var respType, requestId int
-	r.readbuf = make([]byte, 4096)
 	respType, requestId, _, err = r.readResponse(timeout)
 	if err != nil {
 		return nil, err
@@ -76,10 +84,13 @@ func (r *RemoteConsole) Write(cmd string) (requestId int, err error) {
 
 func (r *RemoteConsole) Read() (response string, requestId int, err error) {
 	var respType int
-	respType, requestId, response, err = r.readResponse(2 * time.Minute)
+	var respBytes []byte
+	respType, requestId, respBytes, err = r.readResponse(2 * time.Minute)
 	if err != nil || respType != respResponse {
 		response = ""
 		requestId = 0
+	} else {
+		response = string(respBytes)
 	}
 	return
 }
@@ -96,6 +107,10 @@ func newRequestId(id int32) int32 {
 }
 
 func (r *RemoteConsole) writeCmd(cmdType int32, str string) (int, error) {
+	if len(str) > 1024-10 {
+		return -1, ErrCommandTooLong
+	}
+
 	buffer := bytes.NewBuffer(make([]byte, 0, 14+len(str)))
 	reqid := atomic.LoadInt32(&r.reqid)
 	reqid = newRequestId(reqid)
@@ -123,23 +138,71 @@ func (r *RemoteConsole) writeCmd(cmdType int32, str string) (int, error) {
 	return int(reqid), err
 }
 
-func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, string, error) {
+func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, []byte, error) {
 	r.readmu.Lock()
 	defer r.readmu.Unlock()
 
 	r.conn.SetReadDeadline(time.Now().Add(timeout))
-	_, err := r.conn.Read(r.readbuf)
-	if err != nil {
-		return 0, 0, "", err
+	var size int
+	var err error
+	if r.queuedbuf != nil {
+		copy(r.readbuf, r.queuedbuf)
+		size = len(r.queuedbuf)
+		r.queuedbuf = nil
+	} else {
+		size, err = r.conn.Read(r.readbuf)
+		if err != nil {
+			return 0, 0, nil, err
+		}
+	}
+	if size < 14 {
+		return 0, 0, nil, ErrUnexpectedFormat
 	}
 
-	var responseSize, requestId, responseType int32
+	var dataSize32 int32
+	b := bytes.NewBuffer(r.readbuf[:size])
+	binary.Read(b, binary.LittleEndian, &dataSize32)
+	if dataSize32 < 10 {
+		return 0, 0, nil, ErrUnexpectedFormat
+	}
+
+	totalSize := size
+	dataSize := int(dataSize32)
+	if dataSize > 4104 {
+		return 0, 0, nil, ErrResponseTooLong
+	}
+
+	for dataSize+4 > totalSize {
+		size, err := r.conn.Read(r.readbuf[totalSize:])
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		totalSize += size
+	}
+
+	data := r.readbuf[4 : 4+dataSize]
+	if totalSize > dataSize+4 {
+		// start of the next buffer was at the end of this packet.
+		// save it for the next read.
+		r.queuedbuf = r.readbuf[4+dataSize : totalSize]
+	}
+
+	return r.readResponseData(data)
+}
+
+func (r *RemoteConsole) readResponseData(data []byte) (int, int, []byte, error) {
+	var requestId, responseType int32
 	var response []byte
-	b := bytes.NewBuffer(r.readbuf)
-	binary.Read(b, binary.LittleEndian, &responseSize)
+	b := bytes.NewBuffer(data)
 	binary.Read(b, binary.LittleEndian, &requestId)
 	binary.Read(b, binary.LittleEndian, &responseType)
-	response, err = b.ReadBytes(0x00)
-
-	return int(responseType), int(requestId), string(response[:len(response)-1]), nil
+	response, err := b.ReadBytes(0x00)
+	if err != nil && err != io.EOF {
+		return 0, 0, nil, err
+	}
+	if err == nil {
+		// if we didn't hit EOF, we have a null byte to remove
+		response = response[:len(response)-1]
+	}
+	return int(responseType), int(requestId), response, nil
 }
