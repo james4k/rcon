@@ -31,8 +31,8 @@ var (
 	ErrAuthFailed          = errors.New("rcon: authentication failed")
 	ErrInvalidAuthResponse = errors.New("rcon: invalid response type during auth")
 	ErrUnexpectedFormat    = errors.New("rcon: unexpected response format")
-	ErrCommandTooLong      = errors.New("rcon: command length too long")
-	ErrResponseTooLong     = errors.New("rcon: response length too long")
+	ErrCommandTooLong      = errors.New("rcon: command too long")
+	ErrResponseTooLong     = errors.New("rcon: response too long")
 )
 
 func New(host, password string) (*RemoteConsole, error) {
