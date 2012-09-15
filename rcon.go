@@ -155,7 +155,7 @@ func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, []byte, e
 			return 0, 0, nil, err
 		}
 	}
-	if size < 14 {
+	if size < 4 {
 		return 0, 0, nil, ErrUnexpectedFormat
 	}
 
