@@ -78,6 +78,14 @@ func New(host, password string) (*RemoteConsole, error) {
 	return r, nil
 }
 
+func (r *RemoteConsole) LocalAddr() net.Addr {
+	return r.conn.LocalAddr()
+}
+
+func (r *RemoteConsole) RemoteAddr() net.Addr {
+	return r.conn.RemoteAddr()
+}
+
 func (r *RemoteConsole) Write(cmd string) (requestId int, err error) {
 	return r.writeCmd(cmdExecCommand, cmd)
 }
