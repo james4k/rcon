@@ -19,6 +19,10 @@ const (
 	respAuthResponse = 2
 )
 
+// 12 byte header, up to 4096 bytes of data, 2 bytes for null terminators.
+// this should be the absolute max size of a single response.
+const readBufferSize = 4110
+
 type RemoteConsole struct {
 	conn      net.Conn
 	readbuf   []byte
@@ -49,9 +53,7 @@ func New(host, password string) (*RemoteConsole, error) {
 		return nil, err
 	}
 
-	// 12 byte header, up to 4096 bytes of data, 2 bytes for null terminators
-	// this should be the absolute max size of a single response.
-	r.readbuf = make([]byte, 4110)
+	r.readbuf = make([]byte, readBufferSize)
 
 	var respType, requestId int
 	respType, requestId, _, err = r.readResponse(timeout)
@@ -164,7 +166,12 @@ func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, []byte, e
 		}
 	}
 	if size < 4 {
-		return 0, 0, nil, ErrUnexpectedFormat
+		// need the 4 byte packet size...
+		s, err := r.conn.Read(r.readbuf[size:])
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		size += s
 	}
 
 	var dataSize32 int32
@@ -176,7 +183,7 @@ func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, []byte, e
 
 	totalSize := size
 	dataSize := int(dataSize32)
-	if dataSize > 4104 {
+	if dataSize > 4106 {
 		return 0, 0, nil, ErrResponseTooLong
 	}
 

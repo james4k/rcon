@@ -1,14 +1,13 @@
-package rcon_test
+package rcon
 
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/james4k/rcon"
 	"net"
 	"testing"
 )
 
-func startTestServer() (string, error) {
+func startTestServer(fn func(net.Conn, *bytes.Buffer)) (string, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", err
@@ -21,7 +20,7 @@ func startTestServer() (string, error) {
 		}
 		defer conn.Close()
 
-		buf := make([]byte, 256)
+		buf := make([]byte, readBufferSize)
 		_, err = conn.Read(buf)
 		if err != nil {
 			return
@@ -44,22 +43,27 @@ func startTestServer() (string, error) {
 		b.Reset()
 		binary.Write(b, binary.LittleEndian, int32(10))
 		binary.Write(b, binary.LittleEndian, int32(requestId))
-		binary.Write(b, binary.LittleEndian, int32(2))
+		binary.Write(b, binary.LittleEndian, int32(respAuthResponse))
 		binary.Write(b, binary.LittleEndian, byte(0))
 		binary.Write(b, binary.LittleEndian, byte(0))
 		conn.Write(b.Bytes())
+
+		if fn != nil {
+			b.Reset()
+			fn(conn, b)
+		}
 	}()
 
 	return listener.Addr().String(), nil
 }
 
 func TestAuth(t *testing.T) {
-	addr, err := startTestServer()
+	addr, err := startTestServer(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rc, err := rcon.New(addr, "blerg")
+	rc, err := New(addr, "blerg")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,4 +74,108 @@ func TestAuth(t *testing.T) {
 	}
 }
 
-// TODO: test multipacket responses
+func TestMultipacket(t *testing.T) {
+	addr, err := startTestServer(func(c net.Conn, b *bytes.Buffer) {
+		// start packet
+		// start response
+		binary.Write(b, binary.LittleEndian, int32(10+4000))
+		binary.Write(b, binary.LittleEndian, int32(123))
+		binary.Write(b, binary.LittleEndian, int32(respResponse))
+		for i := 0; i < 4000; i += 1 {
+			binary.Write(b, binary.LittleEndian, byte(' '))
+		}
+		binary.Write(b, binary.LittleEndian, byte(0))
+		binary.Write(b, binary.LittleEndian, byte(0))
+		// end response
+		// start response
+		binary.Write(b, binary.LittleEndian, int32(10+4000))
+		binary.Write(b, binary.LittleEndian, int32(123))
+		binary.Write(b, binary.LittleEndian, int32(respResponse))
+		for i := 0; i < 2000; i += 1 {
+			binary.Write(b, binary.LittleEndian, byte(' '))
+		}
+		c.Write(b.Bytes())
+		// end packet
+
+		// start packet
+		b.Reset()
+		for i := 0; i < 2000; i += 1 {
+			binary.Write(b, binary.LittleEndian, byte(' '))
+		}
+		binary.Write(b, binary.LittleEndian, byte(0))
+		binary.Write(b, binary.LittleEndian, byte(0))
+		// end response
+		// start response
+		binary.Write(b, binary.LittleEndian, int32(10+2000))
+		binary.Write(b, binary.LittleEndian, int32(123))
+		binary.Write(b, binary.LittleEndian, int32(respResponse))
+		for i := 0; i < 2000; i += 1 {
+			binary.Write(b, binary.LittleEndian, byte(' '))
+		}
+		binary.Write(b, binary.LittleEndian, byte(0))
+		binary.Write(b, binary.LittleEndian, byte(0))
+		// end response
+		// start response - size word is split!
+		binary.Write(b, binary.LittleEndian, int32(10+2000))
+		c.Write(b.Bytes()[:len(b.Bytes())-3])
+		// end packet
+
+		b.Reset()
+		binary.Write(b, binary.LittleEndian, int32(10+2000))
+		binary.Write(b, binary.LittleEndian, int32(123))
+		binary.Write(b, binary.LittleEndian, int32(respResponse))
+		for i := 0; i < 2000; i += 1 {
+			binary.Write(b, binary.LittleEndian, byte(' '))
+		}
+		binary.Write(b, binary.LittleEndian, byte(0))
+		binary.Write(b, binary.LittleEndian, byte(0))
+		// end response
+		c.Write(b.Bytes()[1:])
+		// end packet
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rc, err := New(addr, "blerg")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	str, _, err := rc.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(str) != 4000 {
+		t.Fatal("response length not correct")
+	}
+
+	str, _, err = rc.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(str) != 4000 {
+		t.Fatal("response length not correct")
+	}
+
+	str, _, err = rc.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(str) != 2000 {
+		t.Fatal("response length not correct")
+	}
+
+	str, _, err = rc.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(str) != 2000 {
+		t.Fatal("response length not correct")
+	}
+
+	err = rc.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
