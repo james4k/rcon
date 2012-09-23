@@ -39,7 +39,7 @@ var (
 	ErrResponseTooLong     = errors.New("rcon: response too long")
 )
 
-func New(host, password string) (*RemoteConsole, error) {
+func Dial(host, password string) (*RemoteConsole, error) {
 	const timeout = 10 * time.Second
 	conn, err := net.DialTimeout("tcp", host, timeout)
 	if err != nil {

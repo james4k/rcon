@@ -63,7 +63,7 @@ func TestAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rc, err := New(addr, "blerg")
+	rc, err := Dial(addr, "blerg")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestMultipacket(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rc, err := New(addr, "blerg")
+	rc, err := Dial(addr, "blerg")
 	if err != nil {
 		t.Fatal(err)
 	}
