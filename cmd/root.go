@@ -10,19 +10,15 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	homedir "github.com/mitchellh/go-homedir"
-	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile  string
 	host     string
 	password string
 	command  string
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd represents the base command when called without any sub commands
 var rootCmd = &cobra.Command{
 	Use:   "rcon",
 	Short: "Basic RCON CLI interface",
@@ -72,8 +68,6 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -82,44 +76,9 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
-
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.rcon.yaml)")
-	rootCmd.PersistentFlags().StringVar(&host, "host", "localhost:27015", "config file (default: localhost:27015)")
-	rootCmd.PersistentFlags().StringVar(&password, "password", "localhost:27015", "RCON password (default: '')")
-	rootCmd.PersistentFlags().StringVar(&command, "command", "", "Command to run (default: status)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-}
-
-// initConfig reads in config file and ENV variables if set.
-func initConfig() {
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := homedir.Dir()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		// Search config in home directory with name ".rcon" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigName(".rcon")
-	}
-
-	viper.AutomaticEnv() // read in environment variables that match
-
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
-	}
+	rootCmd.PersistentFlags().StringVarP(&host, "host", "H", "localhost:27015",
+		"Remote host, host:port format")
+	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "RCON password")
+	rootCmd.PersistentFlags().StringVarP(&command, "command", "c", "",
+		"Command to run. If not specified a basic interactive REPL interface is loaded")
 }

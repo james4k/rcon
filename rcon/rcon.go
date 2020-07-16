@@ -27,10 +27,10 @@ const readBufferSize = 4110
 
 type RemoteConsole struct {
 	conn      net.Conn
-	readbuf   []byte
-	readmu    sync.Mutex
-	reqid     int32
-	queuedbuf []byte
+	readBuf   []byte
+	readMu    sync.Mutex
+	reqID     int32
+	queuedBuf []byte
 }
 
 var (
@@ -47,14 +47,14 @@ func Dial(ctx context.Context, host, password string, timeout time.Duration) (*R
 	if err != nil {
 		return nil, err
 	}
-	var reqid int
-	r := &RemoteConsole{conn: conn, reqid: 0x7fffffff}
-	reqid, err = r.writeCmd(cmdAuth, password)
+	var reqID int
+	r := &RemoteConsole{conn: conn, reqID: 0x7fffffff}
+	reqID, err = r.writeCmd(cmdAuth, password)
 	if err != nil {
 		return nil, err
 	}
 
-	r.readbuf = make([]byte, readBufferSize)
+	r.readBuf = make([]byte, readBufferSize)
 
 	var respType, requestId int
 	respType, requestId, _, err = r.readResponse(timeout)
@@ -74,7 +74,7 @@ func Dial(ctx context.Context, host, password string, timeout time.Duration) (*R
 	if respType != respAuthResponse {
 		return nil, ErrInvalidAuthResponse
 	}
-	if requestId != reqid {
+	if requestId != reqID {
 		return nil, ErrAuthFailed
 	}
 
@@ -123,52 +123,66 @@ func (r *RemoteConsole) writeCmd(cmdType int32, str string) (int, error) {
 	}
 
 	buffer := bytes.NewBuffer(make([]byte, 0, 14+len(str)))
-	reqid := atomic.LoadInt32(&r.reqid)
-	reqid = newRequestId(reqid)
-	atomic.StoreInt32(&r.reqid, reqid)
+	reqID := atomic.LoadInt32(&r.reqID)
+	reqID = newRequestId(reqID)
+	atomic.StoreInt32(&r.reqID, reqID)
 
 	// packet size
-	binary.Write(buffer, binary.LittleEndian, int32(10+len(str)))
+	if err := binary.Write(buffer, binary.LittleEndian, int32(10+len(str))); err != nil {
+		return 0, err
+	}
 
 	// request id
-	binary.Write(buffer, binary.LittleEndian, int32(reqid))
+	if err := binary.Write(buffer, binary.LittleEndian, reqID); err != nil {
+		return 0, err
+	}
 
 	// auth cmd
-	binary.Write(buffer, binary.LittleEndian, int32(cmdType))
+	if err := binary.Write(buffer, binary.LittleEndian, cmdType); err != nil {
+		return 0, err
+	}
 
 	// string (null terminated)
 	buffer.WriteString(str)
-	binary.Write(buffer, binary.LittleEndian, byte(0))
+	if err := binary.Write(buffer, binary.LittleEndian, byte(0)); err != nil {
+		return 0, err
+	}
 
 	// string 2 (null terminated)
 	// we don't have a use for string 2
-	binary.Write(buffer, binary.LittleEndian, byte(0))
+	if err := binary.Write(buffer, binary.LittleEndian, byte(0)); err != nil {
+		return 0, err
+	}
 
-	r.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err := r.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return 0, err
+	}
 	_, err := r.conn.Write(buffer.Bytes())
-	return int(reqid), err
+	return int(reqID), err
 }
 
 func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, []byte, error) {
-	r.readmu.Lock()
-	defer r.readmu.Unlock()
+	r.readMu.Lock()
+	defer r.readMu.Unlock()
 
-	r.conn.SetReadDeadline(time.Now().Add(timeout))
+	if err := r.conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return 0, 0, nil, err
+	}
 	var size int
 	var err error
-	if r.queuedbuf != nil {
-		copy(r.readbuf, r.queuedbuf)
-		size = len(r.queuedbuf)
-		r.queuedbuf = nil
+	if r.queuedBuf != nil {
+		copy(r.readBuf, r.queuedBuf)
+		size = len(r.queuedBuf)
+		r.queuedBuf = nil
 	} else {
-		size, err = r.conn.Read(r.readbuf)
+		size, err = r.conn.Read(r.readBuf)
 		if err != nil {
 			return 0, 0, nil, err
 		}
 	}
 	if size < 4 {
 		// need the 4 byte packet size...
-		s, err := r.conn.Read(r.readbuf[size:])
+		s, err := r.conn.Read(r.readBuf[size:])
 		if err != nil {
 			return 0, 0, nil, err
 		}
@@ -176,8 +190,10 @@ func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, []byte, e
 	}
 
 	var dataSize32 int32
-	b := bytes.NewBuffer(r.readbuf[:size])
-	binary.Read(b, binary.LittleEndian, &dataSize32)
+	b := bytes.NewBuffer(r.readBuf[:size])
+	if err := binary.Read(b, binary.LittleEndian, &dataSize32); err != nil {
+		return 0, 0, nil, err
+	}
 	if dataSize32 < 10 {
 		return 0, 0, nil, ErrUnexpectedFormat
 	}
@@ -189,18 +205,18 @@ func (r *RemoteConsole) readResponse(timeout time.Duration) (int, int, []byte, e
 	}
 
 	for dataSize+4 > totalSize {
-		size, err := r.conn.Read(r.readbuf[totalSize:])
+		size, err := r.conn.Read(r.readBuf[totalSize:])
 		if err != nil {
 			return 0, 0, nil, err
 		}
 		totalSize += size
 	}
 
-	data := r.readbuf[4 : 4+dataSize]
+	data := r.readBuf[4 : 4+dataSize]
 	if totalSize > dataSize+4 {
 		// start of the next buffer was at the end of this packet.
 		// save it for the next read.
-		r.queuedbuf = r.readbuf[4+dataSize : totalSize]
+		r.queuedBuf = r.readBuf[4+dataSize : totalSize]
 	}
 
 	return r.readResponseData(data)
@@ -210,8 +226,12 @@ func (r *RemoteConsole) readResponseData(data []byte) (int, int, []byte, error) 
 	var requestId, responseType int32
 	var response []byte
 	b := bytes.NewBuffer(data)
-	binary.Read(b, binary.LittleEndian, &requestId)
-	binary.Read(b, binary.LittleEndian, &responseType)
+	if err := binary.Read(b, binary.LittleEndian, &requestId); err != nil {
+		return 0, 0, nil, err
+	}
+	if err := binary.Read(b, binary.LittleEndian, &responseType); err != nil {
+		return 0, 0, nil, err
+	}
 	response, err := b.ReadBytes(0x00)
 	if err != nil && err != io.EOF {
 		return 0, 0, nil, err
