@@ -15,17 +15,19 @@ import (
 var (
 	host     string
 	password string
-	command  string
 )
 
 // rootCmd represents the base command when called without any sub commands
 var rootCmd = &cobra.Command{
-	Use:   "rcon",
-	Short: "Basic RCON CLI interface",
-	Long:  `Basic RCON CLI interface`,
+	Use:     "rcon [command]",
+	Short:   "Basic RCON CLI interface",
+	Long:    `Basic RCON CLI interface`,
+	Version: rcon.BuildVersion,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
+	Args: cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		command := strings.Join(args, " ")
 		ctx := context.Background()
 		if host == "" {
 			log.Fatalf("host cannot be empty")
@@ -79,6 +81,4 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&host, "host", "H", "localhost:27015",
 		"Remote host, host:port format")
 	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "RCON password")
-	rootCmd.PersistentFlags().StringVarP(&command, "command", "c", "",
-		"Command to run. If not specified a basic interactive REPL interface is loaded")
 }

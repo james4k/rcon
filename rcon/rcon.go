@@ -41,6 +41,10 @@ var (
 	ErrResponseTooLong     = errors.New("rcon: response too long")
 )
 
+var (
+	BuildVersion = "master"
+)
+
 func Dial(ctx context.Context, host, password string, timeout time.Duration) (*RemoteConsole, error) {
 	dialer := net.Dialer{}
 	conn, err := dialer.DialContext(ctx, "tcp", host)
