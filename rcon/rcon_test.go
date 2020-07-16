@@ -2,9 +2,11 @@ package rcon
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"net"
 	"testing"
+	"time"
 )
 
 func startTestServer(fn func(net.Conn, *bytes.Buffer)) (string, error) {
@@ -63,7 +65,7 @@ func TestAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rc, err := Dial(addr, "blerg")
+	rc, err := Dial(context.Background(), addr, "blerg", 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +139,7 @@ func TestMultipacket(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rc, err := Dial(addr, "blerg")
+	rc, err := Dial(context.Background(), addr, "blerg", 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}

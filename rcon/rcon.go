@@ -2,9 +2,11 @@ package rcon
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -39,13 +41,12 @@ var (
 	ErrResponseTooLong     = errors.New("rcon: response too long")
 )
 
-func Dial(host, password string) (*RemoteConsole, error) {
-	const timeout = 10 * time.Second
-	conn, err := net.DialTimeout("tcp", host, timeout)
+func Dial(ctx context.Context, host, password string, timeout time.Duration) (*RemoteConsole, error) {
+	dialer := net.Dialer{}
+	conn, err := dialer.DialContext(ctx, "tcp", host)
 	if err != nil {
 		return nil, err
 	}
-
 	var reqid int
 	r := &RemoteConsole{conn: conn, reqid: 0x7fffffff}
 	reqid, err = r.writeCmd(cmdAuth, password)
@@ -220,4 +221,20 @@ func (r *RemoteConsole) readResponseData(data []byte) (int, int, []byte, error) 
 		response = response[:len(response)-1]
 	}
 	return int(responseType), int(requestId), response, nil
+}
+
+func (r *RemoteConsole) Exec(c string) (string, error) {
+	wid, err := r.Write(c)
+	if err != nil {
+		log.Fatalf("Failed to write RCON command")
+	}
+	for {
+		resp, rid, err := r.Read()
+		if err != nil {
+			log.Fatalf("Failed to read response")
+		}
+		if wid == rid {
+			return resp, nil
+		}
+	}
 }
