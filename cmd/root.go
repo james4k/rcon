@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/leighmacdonald/rcon/rcon"
 	"github.com/spf13/cobra"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -32,6 +33,10 @@ var rootCmd = &cobra.Command{
 		if host == "" {
 			log.Fatalf("host cannot be empty")
 		}
+		hostParts := strings.Split(host, ":")
+		if len(hostParts) == 1 {
+			host += ":27015"
+		}
 		if password == "" {
 			log.Fatalf("password cannot be empty")
 		}
@@ -39,14 +44,14 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Failed to dial server")
 		}
-		// Exec single command and return
+		// Exec single command and exit
 		if command != "" {
 			resp, err := conn.Exec(command)
 			if err != nil {
 				log.Fatalf("Failed to exec command: %v", err)
 			}
 			fmt.Printf("%s\n", resp)
-			return
+			os.Exit(0)
 		}
 		// REPL CLI
 		reader := bufio.NewReader(os.Stdin)
@@ -54,6 +59,10 @@ var rootCmd = &cobra.Command{
 			fmt.Printf("rcon> ")
 			cIn, err := reader.ReadString('\n')
 			if err != nil {
+				if err == io.EOF {
+					fmt.Print("\b")
+					os.Exit(0)
+				}
 				log.Fatalf("Failed to read line: %v", err)
 			}
 			c := strings.ToLower(strings.Trim(cIn, " \n"))
