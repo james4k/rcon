@@ -19,7 +19,7 @@ Basic flags for connecting. Host and password must be set. If the host does not 
       -v, --version           version for rcon
 
 If you do not specify a command a simple REPL shell will open instead as shown below    
-
+    
     $ rcon -H tf2-server.com -p asdf       
     rcon> status
     hostname: Uncletopia | San Francisco
@@ -41,25 +41,26 @@ If you do not specify a command a simple REPL shell will open instead as shown b
     
 ## Library Usage
 
-    package main
-    
-    import (
-        "context"
-        "github.com/leighmacdonald/rcon/rcon"
-    )
-    
-    func main() {
-        // Connect
-        conn, err := rcon.Dial(context.Background(), "localhost:27015", "P@SSW0RD", 10*time.Second)
-        if err != nil {
-            log.Fatalf("Failed to dial server")
-        }
-        // Exec your command
-        resp, err := conn.Exec("status")
-        if err != nil {
-            log.Fatalf("Failed to exec command: %v", err)
-        }
-        // Do something with the response
-        fmt.Printf("%s\n", resp)
-    }
+```go
+package main
 
+import (
+    "context"
+    "github.com/leighmacdonald/rcon/rcon"
+)
+
+func main() {
+    // Connect
+    conn, err := rcon.Dial(context.Background(), "localhost:27015", "P@SSW0RD", 10*time.Second)
+    if err != nil {
+        log.Fatalf("Failed to dial server")
+    }
+    // Exec your command
+    resp, err := conn.Exec("status")
+    if err != nil {
+        log.Fatalf("Failed to exec command: %v", err)
+    }
+    // Do something with the response
+    fmt.Printf("%s\n", resp)
+}
+```
