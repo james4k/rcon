@@ -1,0 +1,32 @@
+# When no server env is specified use these as the default
+default_servers: [ "us-1", "us-2",  "us-3",  "us-4",  "eu-1",  "eu-2"]
+
+# Set to "" to enable rcon console, otherwise this command will be executed and the program will exit
+default_command: ""
+
+# Example of sharing config values between hosts
+__defaults: &defaults
+  host: localhost:27015
+  password: your_common_rcon_password
+
+# Known server environments
+servers:
+  us-1:
+    host: "us1.uncledane.com"
+    password: custom_password
+  us-2:
+    <<: *defaults
+    host: "us2.uncledane.com"
+  us-3:
+    <<: *defaults
+    host: "us3.uncledane.com"
+    command: "maps *"
+  us-4:
+    <<: *defaults
+    host: "us4.uncledane.com"
+  eu-1:
+    <<: *defaults
+    host: "eu1.uncledane.com"
+  eu-2:
+    <<: *defaults
+    host: "eu2.uncledane.com"

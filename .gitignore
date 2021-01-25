@@ -18,3 +18,5 @@
 
 *.zip
 /build/
+/rcon.yaml
+/.idea/
